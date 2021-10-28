@@ -1,0 +1,313 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "name": "bacteriu.py",
+      "private_outputs": true,
+      "provenance": [],
+      "collapsed_sections": [],
+      "authorship_tag": "ABX9TyNEhlA7BpajQzfMIpOt7nyV",
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    },
+    "accelerator": "TPU"
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/arunkumard001/bateriaclassification/blob/main/bacteriu_py.\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "MTzqoRklrgMg"
+      },
+      "source": [
+        "from google.colab import drive\n",
+        "drive.mount('/content/gdrive')"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "W6DWUEzyKlpa"
+      },
+      "source": [
+        "#preprocessing\n",
+        "import os\n",
+        "import cv2\n",
+        "import numpy as np\n",
+        "import scipy.io\n",
+        "\n",
+        "def create_dataset(IMG_SIZE=128,DATA_DIR='/content/gdrive/MyDrive/ColabNotebooks/data/train/'):\n",
+        "    output_file= \"/content/gdrive/MyDrive/ColabNotebooks/data/dataset.mat\"\n",
+        "    if os.path.exists(output_file):\n",
+        "        os.remove(output_file)\n",
+        "    img_dirs=os.listdir(DATA_DIR)\n",
+        "    labels=np.ndarray([])\n",
+        "    dataset=np.ndarray([])\n",
+        "    CLASSES=0\n",
+        "    CLASSNAMES=[]\n",
+        "    for classname in img_dirs:\n",
+        "        print('================\\nCLASS:'+ classname +'\\n==============')\n",
+        "        if os.path.isfile(DATA_DIR+ classname):\n",
+        "            continue\n",
+        "        files = os.listdir(DATA_DIR+ classname)\n",
+        "        fileCount=0\n",
+        "        for file_name in files:\n",
+        "            fileCount=fileCount+1\n",
+        "            img_file = DATA_DIR +classname+\"/\" +file_name\n",
+        "            print(fileCount,file_name)\n",
+        "            img = cv2.imread(img_file)\n",
+        "            try:\n",
+        "              img = cv2.resize(img,(IMG_SIZE,IMG_SIZE))\n",
+        "            except:\n",
+        "              continue\n",
+        "            img = cv2.normalize(img.astype(\"float\"),None,0.0,1.0,cv2.NORM_MINMAX)\n",
+        "            img =np.reshape(img,(1,img.shape[0],img.shape[1],img.shape[2]))\n",
+        "            if dataset.shape==():\n",
+        "                dataset=img\n",
+        "                labels=CLASSES\n",
+        "\n",
+        "            else:\n",
+        "                dataset=np.concatenate((dataset,img),axis=0)\n",
+        "                labels=np.append(labels,CLASSES)\n",
+        "        CLASSNAMES.append(classname)\n",
+        "        CLASSES=CLASSES+1\n",
+        "    scipy.io.savemat(output_file,mdict={'dataset':dataset,'labels':labels,\n",
+        "                    'CLASSES':CLASSES,'CLASSNAMES':CLASSNAMES},oned_as='row')\n",
+        "    print('================')\n",
+        "    print('Dataset created:',dataset.shape)"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "ndXd32dIKuVv"
+      },
+      "source": [
+        "\n",
+        "#model create and train of cnn\n",
+        "import os\n",
+        "import numpy as np\n",
+        "import keras\n",
+        "import tensorflow as tf\n",
+        "from keras.models import Sequential\n",
+        "from keras.layers import MaxPooling2D,Input,Dense,Conv2D,Flatten\n",
+        "from tensorflow.keras.utils import to_categorical\n",
+        "import matplotlib.pyplot as plt\n",
+        "os.environ['TF_CPP_MIN_LOG_LEVEL'] ='3'\n",
+        "def trainCNN(dataset,labels,CLASSES,EPOCHS):\n",
+        "        N = dataset.shape[0]\n",
+        "        Nl = int(N*.7)\n",
+        "        data = dataset;\n",
+        "        label = labels\n",
+        "        np.random.seed(12345)\n",
+        "        pos=np.random.permutation(N)\n",
+        "        data_train = data[pos[0:Nl],:]\n",
+        "        data_test = data[pos[Nl:],:]\n",
+        "        label_train = label[pos[0:Nl]]\n",
+        "        label_test = label[pos[Nl:]]\n",
+        "        label_train=to_categorical(label_train)\n",
+        "        label_test=to_categorical(label_test)\n",
+        "        print('Training Data Size', data_train.shape)\n",
+        "        print(\"testing Data size\", data_test.shape)\n",
+        "        #create model\n",
+        "        model = Sequential()\n",
+        "        model.add(Conv2D(64, kernel_size=(3,3),activation='relu',\n",
+        "                input_shape=dataset.shape[1:], data_format='channels_last'))\n",
+        "        model.add(MaxPooling2D(pool_size=(3,3)))\n",
+        "        model.add(Conv2D(128,(3,3),activation='relu'))\n",
+        "        model.add(MaxPooling2D(pool_size=(3,3)))\n",
+        "        model.add(Conv2D(256,(3,3),activation='relu'))\n",
+        "        model.add(MaxPooling2D(pool_size=(2,2)))\n",
+        "        model.add(Flatten())\n",
+        "        model.add(Dense(64,activation=\"relu\"))\n",
+        "        #model.add(dropout(0.5))\n",
+        "        model.add(Dense(CLASSES,activation='softmax'))\n",
+        "        model.compile(optimizer=\"sgd\",\n",
+        "                      loss=\"categorical_crossentropy\", metrics=[\"accuracy\"])\n",
+        "        history=model.fit(data_train,label_train,\n",
+        "                          validation_data=(data_test,label_test),epochs=EPOCHS,verbose = 1)\n",
+        "        #tf.keras.model.save_model('trainedmodel',)\n",
+        "        model.save(\"/content/gdrive/MyDrive/ColabNotebooks/data/trainedmodel.h5\",)\n",
+        "        print(history.history.keys())\n",
+        "        #summarize history for accuracy\n",
+        "        plt.plot(history.history['accuracy'])\n",
+        "        plt.plot(history.history['val_accuracy'])\n",
+        "        plt.title('model accuracy')\n",
+        "        plt.ylabel(\"accuracy\")\n",
+        "        plt.xlabel('epoch')\n",
+        "        plt.legend(['train','test'], loc='upper left')\n",
+        "        plt.show()\n",
+        "         #summarize history for loss\n",
+        "        plt.plot(history.history['loss'])\n",
+        "        plt.plot(history.history['val_loss'])\n",
+        "        plt.title('model loss')\n",
+        "        plt.ylabel(\"loss\")\n",
+        "        plt.xlabel('epoch')\n",
+        "        plt.legend(['train','test'], loc='upper left')\n",
+        "        plt.show()"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "WbbF32dMKxZQ"
+      },
+      "source": [
+        "\n",
+        "#main\n",
+        "import os\n",
+        "import numpy as np\n",
+        "import scipy.io\n",
+        "dataset=\"/content/gdrive/MyDrive/ColabNotebooks/data/dataset.mat\"\n",
+        "create_dataset(256)\n",
+        "data = scipy.io.loadmat(dataset)\n",
+        "dataset = data['dataset']\n",
+        "labels=data['labels'].flatten()\n",
+        "CLASSES = data['CLASSES']\n",
+        "CLASSNAMES = data['CLASSNAMES']\n",
+        "print('Dataset Loaded',dataset.shape)\n",
+        "trainCNN(dataset,labels,CLASSES,50)"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "e9eDek05IlOM"
+      },
+      "source": [
+        "\n",
+        "#model evalution\n",
+        "import os\n",
+        "import numpy as np\n",
+        "import keras\n",
+        "import cv2\n",
+        "import scipy.io\n",
+        "import tensorflow as tf\n",
+        "from random import randint\n",
+        "dataset = \"/content/gdrive/MyDrive/ColabNotebooks/data/dataset.mat\"\n",
+        "data = scipy.io.loadmat(dataset)\n",
+        "CLASSNAMES=data[\"CLASSNAMES\"]\n",
+        "count = 0\n",
+        "model = tf.keras.models.load_model(\"/content/gdrive/MyDrive/ColabNotebooks/data/trainedmodel.h5\")\n",
+        "import time\n",
+        "while (count<10):\n",
+        "    count = count+1\n",
+        "    INPUT_IMG ='/content/gdrive/MyDrive/ColabNotebooks/data/test/'\n",
+        "    class_name = randint(1,3)\n",
+        "    print(class_name)\n",
+        "    INPUT_IMG = INPUT_IMG + str(1)+\"/\"+\"test.jpg\"\n",
+        "    #INPUT_IMG = INPUT_IMG + str(randint(1,6))+\"/\"+'.tif'\n",
+        "    IMG_SIZE=256\n",
+        "    img=cv2.imread(INPUT_IMG)\n",
+        "    try:\n",
+        "      img=cv2.resize(img,(IMG_SIZE,IMG_SIZE))\n",
+        "    except:\n",
+        "      pass\n",
+        "    img =cv2.normalize(img.astype(\"float\"),None,0.0,1.0,cv2.NORM_MINMAX)\n",
+        "    img =np.reshape(img,(1,img.shape[0],img.shape[1],img.shape[2]))\n",
+        "    print('\\n\\n\\n\\n\\n\\n\\n\\n\\n')\n",
+        "    print('===================================================')\n",
+        "    P=model.predict(img)\n",
+        "    print(INPUT_IMG)\n",
+        "    print(P,',',np.argmax(P))\n",
+        "    print(CLASSNAMES)\n",
+        "    print(\"predicted class:\",CLASSNAMES[np.argmax(P)])\n",
+        "    #if str(class_name)==CLASSNAMES[np.argmax(P)]:\n",
+        "        # print('correct')\n",
+        "    # else:\n",
+        "        # print('INCORRECT')\n",
+        "    print('===================================================')\n",
+        "    print('\\n') \n",
+        "    time.sleep(.01)"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "FrA00hDzKiYY"
+      },
+      "source": [
+        ""
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "Pjybt0boLPuG"
+      },
+      "source": [
+        "\n",
+        "#classification\n",
+        "import os\n",
+        "import numpy as np\n",
+        "import keras\n",
+        "import cv2\n",
+        "import scipy.io\n",
+        "import tensorflow as tf\n",
+        "dataset = \"/content/gdrive/MyDrive/ColabNotebooks/data/dataset.mat\"\n",
+        "data = scipy.io.loadmat(dataset)\n",
+        "CLASSNAMES = data[\"CLASSNAMES\"]\n",
+        "count=0\n",
+        "model=tf.keras.models.load_model(\"/content/gdrive/MyDrive/ColabNotebooks/data/trainedmodel.h5\")\n",
+        "check_num =len(os.listdir(\"/content/gdrive/MyDrive/ColabNotebooks/data/real/\"))\n",
+        "IMG_SIZE =256\n",
+        "while(count<check_num):\n",
+        "    print(count)\n",
+        "    INPUT_IMG ='/content/gdrive/MyDrive/ColabNotebooks/data/real/' +\"test0/\"+\"test03.tif\"\n",
+        "    img= cv2.imread(INPUT_IMG)\n",
+        "    img = cv2.resize(img,(IMG_SIZE,IMG_SIZE))\n",
+        "    img = cv2.normalize(img.astype('float'),None,0.0,1.0,cv2.NORM_MINMAX)\n",
+        "    img = np.reshape(img,(1,img.shape[0],img.shape[1],img.shape[2]))\n",
+        "    count=count+1\n",
+        "    P = model.predict(img)\n",
+        "    print(INPUT_IMG)\n",
+        "    print(\"predicted class:\",CLASSNAMES[np.argmax(P)])"
+      ],
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "lu74fXSj1pdN"
+      },
+      "source": [
+        "# import tensorflow as tf\n",
+        "# minor_model = tf.keras.models.load_model('/content/gdrive/MyDrive/ColabNotebooks/data/trainedmodel.h5')\n",
+        "# converter = tf.lite.TFLiteConverter.from_keras_model(minor_model)\n",
+        "# tflite_model = converter.convert()\n",
+        "# open(\"My_TFlite_Model.tflite\", \"wb\").write(tflite_model)"
+      ],
+      "execution_count": null,
+      "outputs": []
+    }
+  ]
+}
